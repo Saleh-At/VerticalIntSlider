@@ -181,17 +181,287 @@ rightSlider.setOnValueChangeListener(new VerticalIntSlider.OnValueChangeListener
 ## Public API (suggested)
 
 ```kotlin
-class VerticalIntSlider : View {
-    var value: Int
-    fun setRange(min: Int, max: Int)
-    fun setOnValueChangeListener(l: OnValueChangeListener?)
+package com.yourpkg.widgets;
 
-    interface OnValueChangeListener {
-        fun onStartTrackingTouch(view: VerticalIntSlider)
-        fun onValueChanging(view: VerticalIntSlider, value: Int, fromUser: Boolean)
-        fun onValueChangeFinished(view: VerticalIntSlider, value: Int)
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.View;
+
+import androidx.annotation.Nullable;
+
+import com.yourpkg.R;
+
+/**
+ * A custom vertical slider that works with integer values.
+ * <p>
+ * Features:
+ * - Integer step values between min/max
+ * - Customizable colors (track, progress, thumb, text)
+ * - Adjustable track width and thumb radius
+ * - Optional ticks and numbers
+ * - Notifies listener during drag and on release
+ *
+ * Designed for use cases where Android’s default horizontal Slider
+ * is not a good fit (volume, brightness, zoom, etc).
+ */
+public class VerticalIntSlider extends View {
+
+    // Attributes
+    private int minValue = 0;
+    private int maxValue = 10;
+    private int value = 0;
+
+    private int trackColor = Color.GRAY;
+    private int progressColor = Color.BLUE;
+    private int thumbColor = Color.RED;
+    private int textColor = Color.BLACK;
+
+    private float trackWidth = 4f;
+    private float thumbRadius = 20f;
+
+    private boolean showTicks = false;
+    private boolean showNumbers = false;
+
+    // Drawing
+    private Paint trackPaint;
+    private Paint progressPaint;
+    private Paint thumbPaint;
+    private Paint textPaint;
+
+    // Listener
+    private OnValueChangeListener listener;
+
+    public VerticalIntSlider(Context context) {
+        super(context);
+        init(null);
+    }
+
+    public VerticalIntSlider(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        init(attrs);
+    }
+
+    public VerticalIntSlider(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        init(attrs);
+    }
+
+    private void init(@Nullable AttributeSet attrs) {
+        trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTextSize(36f);
+
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.VerticalIntSlider);
+
+            minValue = a.getInt(R.styleable.VerticalIntSlider_vis_min, minValue);
+            maxValue = a.getInt(R.styleable.VerticalIntSlider_vis_max, maxValue);
+            trackColor = a.getColor(R.styleable.VerticalIntSlider_vis_trackColor, trackColor);
+            progressColor = a.getColor(R.styleable.VerticalIntSlider_vis_progressColor, progressColor);
+            thumbColor = a.getColor(R.styleable.VerticalIntSlider_vis_thumbColor, thumbColor);
+            textColor = a.getColor(R.styleable.VerticalIntSlider_vis_textColor, textColor);
+            trackWidth = a.getDimension(R.styleable.VerticalIntSlider_vis_trackWidth, trackWidth);
+            thumbRadius = a.getDimension(R.styleable.VerticalIntSlider_vis_thumbRadius, thumbRadius);
+            showTicks = a.getBoolean(R.styleable.VerticalIntSlider_vis_showTicks, showTicks);
+            showNumbers = a.getBoolean(R.styleable.VerticalIntSlider_vis_showNumbers, showNumbers);
+
+            a.recycle();
+        }
+
+        updatePaints();
+    }
+
+    private void updatePaints() {
+        trackPaint.setColor(trackColor);
+        trackPaint.setStrokeWidth(trackWidth);
+
+        progressPaint.setColor(progressColor);
+        progressPaint.setStrokeWidth(trackWidth);
+
+        thumbPaint.setColor(thumbColor);
+
+        textPaint.setColor(textColor);
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        int width = getWidth();
+        int height = getHeight();
+        int centerX = width / 2;
+
+        // Draw track
+        canvas.drawLine(centerX, thumbRadius, centerX, height - thumbRadius, trackPaint);
+
+        // Draw progress
+        float progressRatio = (float) (value - minValue) / (maxValue - minValue);
+        float thumbY = height - thumbRadius - progressRatio * (height - 2 * thumbRadius);
+        canvas.drawLine(centerX, height - thumbRadius, centerX, thumbY, progressPaint);
+
+        // Draw ticks
+        if (showTicks) {
+            int steps = maxValue - minValue;
+            for (int i = 0; i <= steps; i++) {
+                float y = height - thumbRadius - i * (height - 2 * thumbRadius) / steps;
+                canvas.drawLine(centerX - 20, y, centerX + 20, y, trackPaint);
+            }
+        }
+
+        // Draw numbers
+        if (showNumbers) {
+            int steps = maxValue - minValue;
+            for (int i = 0; i <= steps; i++) {
+                int num = minValue + i;
+                float y = height - thumbRadius - i * (height - 2 * thumbRadius) / steps;
+                canvas.drawText(String.valueOf(num), centerX - 40, y + 12, textPaint);
+            }
+        }
+
+        // Draw thumb
+        canvas.drawCircle(centerX, thumbY, thumbRadius, thumbPaint);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        int height = getHeight();
+
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                if (listener != null) {
+                    listener.onStartTrackingTouch(this);
+                }
+                updateValueFromTouch(event.getY(), true, false);
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                updateValueFromTouch(event.getY(), true, true);
+                return true;
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                updateValueFromTouch(event.getY(), true, false);
+                if (listener != null) {
+                    listener.onValueChangeFinished(this, value);
+                }
+                return true;
+        }
+
+        return super.onTouchEvent(event);
+    }
+
+    private void updateValueFromTouch(float y, boolean fromUser, boolean isDragging) {
+        int height = getHeight();
+        float ratio = (height - thumbRadius - y) / (height - 2 * thumbRadius);
+        ratio = Math.max(0f, Math.min(1f, ratio));
+
+        int newValue = minValue + Math.round(ratio * (maxValue - minValue));
+        if (newValue != value) {
+            value = newValue;
+            invalidate();
+            if (listener != null) {
+                listener.onValueChanging(this, value, fromUser);
+            }
+        }
+    }
+
+    // Public API
+
+    public void setOnValueChangeListener(OnValueChangeListener listener) {
+        this.listener = listener;
+    }
+
+    public void setRange(int min, int max) {
+        this.minValue = min;
+        this.maxValue = max;
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
+        invalidate();
+    }
+
+    public int getValue() {
+        return value;
+    }
+
+    public void setValue(int v) {
+        if (v < minValue) v = minValue;
+        if (v > maxValue) v = maxValue;
+        if (this.value != v) {
+            this.value = v;
+            invalidate();
+        }
+    }
+
+    // State saving (e.g. on config change)
+    @Override
+    protected Parcelable onSaveInstanceState() {
+        Parcelable superState = super.onSaveInstanceState();
+        SavedState ss = new SavedState(superState);
+        ss.value = this.value;
+        return ss;
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Parcelable state) {
+        if (!(state instanceof SavedState)) {
+            super.onRestoreInstanceState(state);
+            return;
+        }
+        SavedState ss = (SavedState) state;
+        super.onRestoreInstanceState(ss.getSuperState());
+        this.value = ss.value;
+    }
+
+    static class SavedState extends BaseSavedState {
+        int value;
+
+        SavedState(Parcelable superState) {
+            super(superState);
+        }
+
+        private SavedState(Parcel in) {
+            super(in);
+            this.value = in.readInt();
+        }
+
+        @Override
+        public void writeToParcel(Parcel out, int flags) {
+            super.writeToParcel(out, flags);
+            out.writeInt(this.value);
+        }
+
+        public static final Creator<SavedState> CREATOR =
+                new Creator<SavedState>() {
+                    @Override
+                    public SavedState createFromParcel(Parcel in) {
+                        return new SavedState(in);
+                    }
+
+                    @Override
+                    public SavedState[] newArray(int size) {
+                        return new SavedState[size];
+                    }
+                };
+    }
+
+    // Listener interface
+    public interface OnValueChangeListener {
+        void onStartTrackingTouch(VerticalIntSlider view);
+        void onValueChanging(VerticalIntSlider view, int value, boolean fromUser);
+        void onValueChangeFinished(VerticalIntSlider view, int value);
     }
 }
+
 ```
 
 ---
