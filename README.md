@@ -1,5 +1,5 @@
 # VerticalIntSlider
-Here’s a polished, GitHub-ready example you can drop into a README. It’s fully in English, looks professional, and shows a clean way to use a vertical integer slider (since Google’s standard `Slider` doesn’t do vertical out of the box).
+A clean way to use a vertical integer slider (since Google’s standard `Slider` doesn’t do vertical out of the box).
 
 ---
 
